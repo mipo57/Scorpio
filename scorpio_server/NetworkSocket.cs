@@ -9,8 +9,68 @@ using System.Threading;
 
 namespace scorpio_server
 {
+    enum ConnectionType { UDP, TCP }
     class NetworkSocket
     {
+        Socket _socket = null;
+        CancellationTokenSource _listening_cancelation = new CancellationTokenSource();
+
+        public delegate void NewConnectionCallback(NetworkSocket socket);
+
+        NetworkSocket() { }
+        NetworkSocket(Socket socket)
+        {
+            _socket = socket;
+        }
+
+        public static NetworkSocket InitializeProtocol(ConnectionType connection_type = ConnectionType.UDP)
+        {
+            Socket socket = null;
+
+            if (connection_type == ConnectionType.TCP)
+            {
+                socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            }
+
+            return new NetworkSocket(socket);
+        }
+
+        public bool ConnectToServer(string server_adress, int port)
+        {
+            _socket.Connect(IPAddress.Parse(server_adress), port);
+
+            if (_socket.Connected)
+            {
+                Console.WriteLine("Connected to {0}:{1}", server_adress, port);
+                return true;
+            }
+            else
+            {
+                Console.WriteLine("Warning: Connection to {0}:{1} failed!", server_adress, port);
+                return false;
+            }
+        }
+
+        public void ListenForConnections(string IP, int port, NewConnectionCallback new_connection_callback, int max_connections = 1)
+        {
+            _socket.Bind(new IPEndPoint(IPAddress.Parse(IP), port));
+            _socket.Listen(max_connections);
+
+            Task.Run(() =>
+            {
+                while(true)
+                {
+                    Socket new_connection = _socket.Accept();
+                    new_connection_callback(new NetworkSocket(new_connection));
+                }
+            });
+        }
+
+        public void StopListeningForConnections()
+        {
+            _listening_cancelation.Cancel();
+        }
+
         static void ProcessRequests(Socket socket)
         {
             byte[] buffer = new byte[1024];
