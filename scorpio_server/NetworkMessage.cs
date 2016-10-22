@@ -11,12 +11,15 @@ namespace scorpio_server
     class NetworkMessage
     {
         byte[] msg = new byte[1024];
-        int msg_length = 0;
+        int message_size = 0;
+        int size_downloaded = 0;
         bool is_raw_data = false;
 
         enum DataType { Void, AsciiString, UnicodeString, UInt32 }
 
-        List<DataType> content_list;
+        List<DataType> content_list = new List<DataType>();
+        List<Object> contents = new List<object>();
+        byte[] data;
 
         public bool ReciveHeader(byte[] msg, int msg_len)
         {
@@ -61,79 +64,93 @@ namespace scorpio_server
                 }
 
                 // read total msg length
-                msg_length = BitConverter.ToInt32(msg, 16);
+                message_size = BitConverter.ToInt32(msg, 16);
 
                 // sanity check (length cannot be less than zero or more than 1GB)
-                if (msg_length < 0 || msg_length > 1073741824)
+                if (message_size < 0 || message_size > 1073741824)
                     return false;
 
+                data = new byte[message_size];
+
                 return true;
             }
 
             return false;
         }
 
-        public bool ReciveDataChunk(byte[] data, int data_len)
+        public bool ReciveDataChunk(byte[] bytes_recived, int data_len)
         {
+            bytes_recived.Take(data_len).ToArray().CopyTo(data, size_downloaded);
+            size_downloaded += data_len;
 
+            if (size_downloaded > message_size)
+                return false;
 
             return true;
         }
 
-        public bool AppendStringUnicode(string str)
+        public bool ComplieRecivedData()
         {
-            byte[] msg_encoded = Encoding.Unicode.GetBytes(Constants.C_START_OF_TEXT + str + Constants.C_END_OF_TEXT);
+            if (size_downloaded < message_size)
+                throw new Exception("Cannot compile partialy downloaded message!");
 
-            if (msg_length + msg_encoded.Length <= 1024)
+            // TODO: Write checksum checking
+
+            int stack_pos = 0;
+            for (int i = 0; i < content_list.Count; i++)
             {
-                msg_encoded.CopyTo(msg, msg_length);
-                msg_length += msg_encoded.Length;
+                switch (content_list[i])
+                {
+                    case DataType.AsciiString:
+                        if (data[stack_pos] == Constants.C_START_OF_TEXT)
+                        {
+                            int start_pos = stack_pos;
+                            while (data[stack_pos] != Constants.C_END_OF_TEXT)
+                            {
+                                stack_pos++;
 
-                return true;
+                                // prevent going beyond message size
+                                if (stack_pos >= message_size)
+                                    return false;
+                            }
+
+                            // get past the string
+                            stack_pos++;
+
+                            // get string without TEXT_START and TEXT_END markups
+                            Encoding.ASCII.GetString(data, start_pos + 1, stack_pos - start_pos - 2);
+                        }
+                        else
+                            return false;
+                        break;
+                    case DataType.UnicodeString:
+                        if (data[stack_pos] == Constants.C_START_OF_TEXT)
+                        {
+                            int start_pos = stack_pos;
+                            while (data[stack_pos] != Constants.C_END_OF_TEXT)
+                            {
+                                stack_pos++;
+
+                                // prevent going beyond message size
+                                if (stack_pos >= message_size)
+                                    return false;
+                            }
+
+                            // get past the string
+                            stack_pos++;
+
+                            // get string without TEXT_START and TEXT_END markups
+                            Encoding.ASCII.GetString(data, start_pos + 1, stack_pos - start_pos - 2);
+                        }
+                        else
+                            return false;
+                        break;
+                    case DataType.UInt32:
+                        break;
+                    default:
+                        break;
+                }
             }
-
-            return false;
-        }
-
-        public bool AppendStringASCII(string str)
-        {
-            byte[] msg_encoded = Encoding.ASCII.GetBytes(Constants.C_START_OF_TEXT + str + Constants.C_END_OF_TEXT);
-
-            if (msg_length + msg_encoded.Length <= 1024)
-            {
-                msg_encoded.CopyTo(msg, msg_length);
-                msg_length += msg_encoded.Length;
-
-                return true;
-            }
-
-            return false;
-        }
-
-        public bool AppendUINT32(UInt32 value)
-        {
-            if (msg_length + 4 <= 1024)
-            {
-                BitConverter.GetBytes(value).CopyTo(msg, msg_length);
-                msg_length += 4;
-
-                return true;
-            }
-
-            return false;
-        }
-
-        public bool AppendFLOAT32(float value)
-        {
-            if (msg_length + 4 <= 1024)
-            {
-                BitConverter.GetBytes(value).CopyTo(msg, msg_length);
-                msg_length += 4;
-
-                return true;
-            }
-
-            return true;
         }
     }
 }

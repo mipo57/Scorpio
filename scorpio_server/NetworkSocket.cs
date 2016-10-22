@@ -59,7 +59,7 @@ namespace scorpio_server
 
             Task.Run(() =>
             {
-                while(true)
+                while (true)
                 {
                     Socket new_connection = _socket.Accept();
                     new_connection_callback(new NetworkSocket(new_connection));
@@ -79,8 +79,7 @@ namespace scorpio_server
 
 
         }
-
-        /*
+    /*
         static void ProcessRequests()
         {
             byte[] buffer = new byte[1024];
