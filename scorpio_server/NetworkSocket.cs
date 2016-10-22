@@ -16,6 +16,7 @@ namespace scorpio_server
         CancellationTokenSource _listening_cancelation = new CancellationTokenSource();
 
         public delegate void NewConnectionCallback(NetworkSocket socket);
+        public delegate void NewMessageRecivedCallback(NetworkSocket socket, NetworkMessage message);
 
         NetworkSocket() { }
         NetworkSocket(Socket socket)
@@ -71,7 +72,16 @@ namespace scorpio_server
             _listening_cancelation.Cancel();
         }
 
-        static void ProcessRequests(Socket socket)
+        static void ProcessRequests(NewMessageRecivedCallback msg_recived_callback)
+        {
+            byte[] buffer;
+            List<byte> full_msg = new List<byte>();
+
+
+        }
+
+        /*
+        static void ProcessRequests()
         {
             byte[] buffer = new byte[1024];
             string message_queue = "";
@@ -99,6 +109,7 @@ namespace scorpio_server
                 }
             }
         }
+        */
 
         static void Ping(Socket socket)
         {
