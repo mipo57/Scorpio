@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "scorpio_client", "scorpio_c
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "scorpio_server", "scorpio_server\scorpio_server.csproj", "{A8041CD8-5A4D-4E25-B0D7-D0674F4C7906}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "scorpio_lib", "scorpio_lib\scorpio_lib.csproj", "{02BA6822-B389-490B-8BAB-E17FEBD550AF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{A8041CD8-5A4D-4E25-B0D7-D0674F4C7906}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A8041CD8-5A4D-4E25-B0D7-D0674F4C7906}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A8041CD8-5A4D-4E25-B0D7-D0674F4C7906}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02BA6822-B389-490B-8BAB-E17FEBD550AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02BA6822-B389-490B-8BAB-E17FEBD550AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02BA6822-B389-490B-8BAB-E17FEBD550AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02BA6822-B389-490B-8BAB-E17FEBD550AF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

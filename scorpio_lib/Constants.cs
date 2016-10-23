@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace scorpio_server
+namespace scorpio_lib
 {
-    class Constants
+    public class Constants
     {
         public static char C_START_OF_TEXT = (char)2;
         public static char C_END_OF_TEXT = (char)3;
