@@ -10,23 +10,25 @@ namespace scorpio_server
 {
     class Client
     {
-        public Socket socket = null;
+        public NetworkSocket socket = null;
 
         public void Connect(string ip, int port)
         {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            socket.Connect(new IPEndPoint(IPAddress.Parse(ip), port));
+            socket = NetworkSocket.InitializeProtocol();
+            socket.ConnectToServer(ip, port);
         }
 
         public void SendMessage(string message)
         {
-            NetworkSocket.Send(socket, message);
+            NetworkMessage msg = new NetworkMessage();
+            msg.AttachString(message, "msg");
+
+            socket.Send(msg);
         }
 
         public void Disconnect()
         {
-            socket.Shutdown(SocketShutdown.Both);
-            socket.Disconnect(true);
+            
         }
 
     }

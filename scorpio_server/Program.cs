@@ -17,7 +17,8 @@ namespace scorpio_server
             Server server = new Server();
             Client client = new Client();
 
-            Task.Run(() => { server.Listen("127.0.0.1", 1024); });
+            server.Start("127.0.0.1", 1024);
+
             client.Connect("127.0.0.1", 1024);
             client.SendMessage("Ala ma kota");
             client.SendMessage("A kot ma Ale");

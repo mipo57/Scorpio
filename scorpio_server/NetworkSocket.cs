@@ -16,15 +16,18 @@ namespace scorpio_server
         CancellationTokenSource _listening_cancelation = new CancellationTokenSource();
 
         public delegate void NewConnectionCallback(NetworkSocket socket);
-        public delegate void NewMessageRecivedCallback(NetworkSocket socket, NetworkMessage message);
+        public delegate void NewMessageRecivedCallback(NetworkMessage message, NetworkSocket connection_socket);
 
         NetworkSocket() { }
         NetworkSocket(Socket socket)
         {
             _socket = socket;
         }
-
-        public static NetworkSocket InitializeProtocol(ConnectionType connection_type = ConnectionType.UDP)
+        
+        /* 
+         * Creates a new socket of specified protocol type
+         */
+        public static NetworkSocket InitializeProtocol(ConnectionType connection_type = ConnectionType.TCP)
         {
             Socket socket = null;
 
@@ -36,6 +39,9 @@ namespace scorpio_server
             return new NetworkSocket(socket);
         }
 
+        /*
+         * Tries to connect to server specified running on adress server_adress:port
+         */
         public bool ConnectToServer(string server_adress, int port)
         {
             _socket.Connect(IPAddress.Parse(server_adress), port);
@@ -52,6 +58,9 @@ namespace scorpio_server
             }
         }
 
+        /*
+         * Asynchonously wait for new connections and fire a callback when a new connection occurs
+         */
         public void ListenForConnections(string IP, int port, NewConnectionCallback new_connection_callback, int max_connections = 1)
         {
             _socket.Bind(new IPEndPoint(IPAddress.Parse(IP), port));
@@ -67,80 +76,75 @@ namespace scorpio_server
             });
         }
 
+
         public void StopListeningForConnections()
         {
             _listening_cancelation.Cancel();
         }
 
-        static void ProcessRequests(NewMessageRecivedCallback msg_recived_callback)
+        public void ProcessRequests(NewMessageRecivedCallback msg_recived_callback)
         {
-            byte[] buffer;
-            List<byte> full_msg = new List<byte>();
+            Task.Run(() =>
+           {
+               byte[] stack_buffer = new byte[0];
+               int message_size = -1;
+
+               while (true)
+               {
+                   byte[] buffer = new byte[4096];
+                   int bytes_recived = _socket.Receive(buffer);
+                   buffer = buffer.Take(bytes_recived).ToArray();
+
+                   while (buffer.Length > 0)
+                   {
+                       if (message_size - stack_buffer.Length <= 0)
+                       {
+                           NetworkMessage.HeaderInfo header_info = NetworkMessage.SearchForMessage(buffer);
+
+                           if (header_info.return_code == NetworkMessage.HeaderInfo.ReturnCode.HeaderFound)
+                           {
+                               message_size = header_info.data_size;
+
+                               stack_buffer = buffer.Skip(header_info.data_start_index).ToArray();
+                               buffer = buffer.Skip(header_info.data_start_index + message_size).ToArray();
+                           }
+                           else if (header_info.return_code == NetworkMessage.HeaderInfo.ReturnCode.HeaderFoundPartially)
+                           {
+                               byte[] tmp_buffer = new byte[2048];
+                               int tmp_bytes_received = _socket.Receive(tmp_buffer);
+                               buffer = buffer.Concat(tmp_buffer.Take(tmp_bytes_received)).ToArray();
+                           }
+                       }
+                       else
+                       {
+                           int skip_size = message_size - stack_buffer.Length;
+
+                           stack_buffer = stack_buffer.Concat(buffer).ToArray();
+                           buffer = buffer.Skip(skip_size).ToArray();
+                       }
 
 
+                       if (stack_buffer.Length >= message_size)
+                       {
+                           
+                           msg_recived_callback(new NetworkMessage(stack_buffer.Take(message_size).ToArray()), this);
+                           message_size = -1;
+                           stack_buffer = new byte[0];
+                       }
+                   }
+               }
+           });
         }
-    /*
-        static void ProcessRequests()
+
+        public void Send(NetworkMessage message)
         {
-            byte[] buffer = new byte[1024];
-            string message_queue = "";
-
-            while (true)
-            {
-                int num_bytes_recived = socket.Receive(buffer);
-
-                if (num_bytes_recived > 0)
-                {
-                    string msg = Encoding.ASCII.GetString(buffer, 0, num_bytes_recived);
-
-                    string[] messages = msg.Split(new char[] { Constants.C_END_OF_MESSAGE }, StringSplitOptions.None);
-                    messages[0] = message_queue + messages[0];
-                    message_queue = messages.Last();
-
-                    foreach (string str in messages.Take(messages.Length - 1))
-                    {
-                        Console.WriteLine("Message from client {0}:{1} - {2}", (socket.RemoteEndPoint as IPEndPoint).Address, (socket.RemoteEndPoint as IPEndPoint).Port, str);
-                    }
-
-                    string return_msg = msg.ToUpper();
-                    byte[] return_msg_en = Encoding.ASCII.GetBytes(return_msg);
-                    socket.Send(return_msg_en);
-                }
-            }
+            _socket.Send(message.GetSerialized());
         }
-        */
 
         static void Ping(Socket socket)
         {
             byte[] ping_message = Encoding.ASCII.GetBytes("<PING>");
             socket.Send(ping_message);
-        }
-
-        public static void Run(Socket connection_socket)
-        {
-            CancellationToken cancelation_token = new CancellationToken();
-            Task.Run(() => { ProcessRequests(connection_socket); }, cancelation_token);
-
-            int last_second = DateTime.Now.Second;
-            while (connection_socket.Connected)
-            {
-                if (DateTime.Now.Second != last_second && DateTime.Now.Second % 3 == 0)
-                {
-                    Ping(connection_socket);
-                    last_second = DateTime.Now.Second;
-                }
-            }
-
-            cancelation_token.ThrowIfCancellationRequested();
-            Console.WriteLine("Client {0}:{1} disconnected!", (connection_socket.RemoteEndPoint as IPEndPoint).Address, (connection_socket.RemoteEndPoint as IPEndPoint).Port);
-        }
-
-        public static void Send(Socket socket, string message)
-        {
-            string msg = message + Constants.C_END_OF_MESSAGE;
-            byte[] message_encoded = Encoding.ASCII.GetBytes(msg);
-
-            socket.Send(message_encoded);
         }
     }
 }

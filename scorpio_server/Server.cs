@@ -10,21 +10,33 @@ namespace scorpio_server
 {
     class Server
     {
-        public Socket socket = null;
-        public List<NetworkSocket> active_connections = null;
+        NetworkSocket _socket = null;
 
-        public void Listen(string adress, int port, int max_connections = 10)
+        /*
+         * Start server on a given adress
+         */
+        public void Start(string adress, int port)
         {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            socket.Bind(new IPEndPoint(IPAddress.Parse(adress), port));
+            _socket = NetworkSocket.InitializeProtocol();
 
-            socket.Listen(max_connections);
+            _socket.ListenForConnections(adress, port, OnNewConnection);
+        }
 
-            while (true)
-            {
-                Socket new_connection = socket.Accept();
-                Task.Run(() => { NetworkSocket.Run(new_connection); });
-            }
+        /* 
+         * Event triggered on every new client connected to server
+         */
+        public void OnNewConnection(NetworkSocket socket)
+        {
+            socket.ProcessRequests(OnMessageReceived);
+            Console.WriteLine("New Connection!");
+        }
+
+        /*
+         * Event triggered on every new message recived
+         */
+        public void OnMessageReceived(NetworkMessage message, NetworkSocket connection_socket)
+        {
+            Console.WriteLine($"Recived message: {message.GetElementString("msg")}");
         }
     }
 }

@@ -5,152 +5,159 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.Net;
+using System.Dynamic;
+using Newtonsoft.Json;
 
 namespace scorpio_server
 {
     class NetworkMessage
     {
-        byte[] msg = new byte[1024];
-        int message_size = 0;
-        int size_downloaded = 0;
-        bool is_raw_data = false;
+        Dictionary<string, byte[]> _data = new Dictionary<string, byte[]>();
+        int _data_iterator = 0;
 
-        enum DataType { Void, AsciiString, UnicodeString, UInt32 }
+        static readonly byte[] header_magic_byte = new byte[4] { 0xAF, 0xFA, 0x0F, 0xA0 };
 
-        List<DataType> content_list = new List<DataType>();
-        List<Object> contents = new List<object>();
-        byte[] data;
-
-        public bool ReciveHeader(byte[] msg, int msg_len)
+        public NetworkMessage() { }
+        public NetworkMessage(byte[] data)
         {
-            if (msg_len > 10)
+            string json_string = Encoding.Unicode.GetString(data);
+
+            try
             {
-                List<DataType> message_content = new List<DataType>();
-
-                // message is not a header
-                if (msg[0] != 1)
-                    return false;
-
-                // check if message is raw data
-                if (msg[1] == 0)
-                    is_raw_data = true;
-                if (msg[1] == 1)
-                    is_raw_data = false;
-
-                if (!is_raw_data)
-                {
-                    // read data layout
-                    for (int i = 2; i < 16; i++)
-                    {
-                        switch (msg[i])
-                        {
-                            case 0:
-                                // Ignore
-                                break;
-                            case (int)DataType.AsciiString:
-                                message_content.Add(DataType.AsciiString);
-                                break;
-                            case (int)DataType.UnicodeString:
-                                message_content.Add(DataType.UnicodeString);
-                                break;
-                            case (int)DataType.UInt32:
-                                message_content.Add(DataType.UInt32);
-                                break;
-                            default:
-                                // unsuported format
-                                return false;
-                        }
-                    }
-                }
-
-                // read total msg length
-                message_size = BitConverter.ToInt32(msg, 16);
-
-                // sanity check (length cannot be less than zero or more than 1GB)
-                if (message_size < 0 || message_size > 1073741824)
-                    return false;
-
-                data = new byte[message_size];
-
-                return true;
+                _data = JsonConvert.DeserializeObject<Dictionary<string, byte[]>>(json_string);
             }
-
-            return false;
+            catch (Exception e)
+            {
+                Console.WriteLine($"Exception: {e.ToString()}");
+            }
         }
 
-        public bool ReciveDataChunk(byte[] bytes_recived, int data_len)
+
+        public void AttachString(string value, string key = null)
         {
-            bytes_recived.Take(data_len).ToArray().CopyTo(data, size_downloaded);
-            size_downloaded += data_len;
+            if (key == null)
+            {
+                key = _data_iterator.ToString();
+                _data_iterator++;
+            }
 
-            if (size_downloaded > message_size)
-                return false;
-
-            return true;
+            _data[key] = Encoding.Unicode.GetBytes(value);
         }
 
-        public bool ComplieRecivedData()
+        public void AttachUINT32(UInt32 value, string key = null)
         {
-            if (size_downloaded < message_size)
-                throw new Exception("Cannot compile partialy downloaded message!");
-
-            // TODO: Write checksum checking
-
-            int stack_pos = 0;
-            for (int i = 0; i < content_list.Count; i++)
+            if (key == null)
             {
-                switch (content_list[i])
-                {
-                    case DataType.AsciiString:
-                        if (data[stack_pos] == Constants.C_START_OF_TEXT)
-                        {
-                            int start_pos = stack_pos;
-                            while (data[stack_pos] != Constants.C_END_OF_TEXT)
-                            {
-                                stack_pos++;
-
-                                // prevent going beyond message size
-                                if (stack_pos >= message_size)
-                                    return false;
-                            }
-
-                            // get past the string
-                            stack_pos++;
-
-                            // get string without TEXT_START and TEXT_END markups
-                            Encoding.ASCII.GetString(data, start_pos + 1, stack_pos - start_pos - 2);
-                        }
-                        else
-                            return false;
-                        break;
-                    case DataType.UnicodeString:
-                        if (data[stack_pos] == Constants.C_START_OF_TEXT)
-                        {
-                            int start_pos = stack_pos;
-                            while (data[stack_pos] != Constants.C_END_OF_TEXT)
-                            {
-                                stack_pos++;
-
-                                // prevent going beyond message size
-                                if (stack_pos >= message_size)
-                                    return false;
-                            }
-
-                            // get past the string
-                            stack_pos++;
-
-                            // get string without TEXT_START and TEXT_END markups
-                            Encoding.ASCII.GetString(data, start_pos + 1, stack_pos - start_pos - 2);
-                        }
-                        else
-                            return false;
-                        break;
-                    case DataType.UInt32:
-                        break;
-                    default:
-                        break;
-                }
+                key = _data_iterator.ToString();
+                _data_iterator++;
             }
+
+            _data[key] = BitConverter.GetBytes(value);
+        }
+
+        public byte[] GetSerialized()
+        {
+            string data = JsonConvert.SerializeObject(_data);
+            byte[] bin_data = Encoding.Unicode.GetBytes(data);
+
+            // create header
+            byte[] message = new byte[8];
+
+            // header magic number
+            message[0] = header_magic_byte[0];
+            message[1] = header_magic_byte[1];
+            message[2] = header_magic_byte[2];
+            message[3] = header_magic_byte[3];
+
+            // length of message
+            BitConverter.GetBytes(bin_data.Length).CopyTo(message, 4);
+
+            // add data to message
+            message = message.Concat(bin_data).ToArray();
+
+            return message;
+        }
+
+        public class HeaderInfo
+        {
+            public enum ReturnCode { HeaderFound, HeaderFoundPartially, HeaderNotFound}
+
+            public ReturnCode return_code = ReturnCode.HeaderFound;
+            public int data_start_index = -1;
+            public int data_size = -1;
+            public int bytes_saved = -1;
+
+        }
+
+        public uint GetElementUInt32 (string key)
+        {
+            byte[] value;
+
+            if (_data.TryGetValue(key, out value))
+            {
+                return BitConverter.ToUInt32(value, 0);
+            }
+            else
+            {
+                Console.WriteLine($"Warning: Element {key} not found! Returning 0");
+                return 0;
+            }
+                
+        }
+
+        public string GetElementString(string key)
+        {
+            byte[] value;
+
+            if (_data.TryGetValue(key, out value))
+            {
+                return Encoding.Unicode.GetString(value);
+            }
+            else
+            {
+                Console.WriteLine($"Warning: Element {key} not found! Returning null");
+                return null;
+            }
+        }
+
+        public static HeaderInfo SearchForMessage(byte[] data)
+        {
+            HeaderInfo header_info = new HeaderInfo();
+
+            // scan data stream for magic numbers
+            int magic_byte_number = 0;
+            int i = 0;
+            for(; i < data.Length; i++)
+            {
+                if (data[i] == header_magic_byte[magic_byte_number])
+                    magic_byte_number++;
+                else
+                    magic_byte_number = 0;
+
+                if (magic_byte_number == 4)
+                    break;
+            }
+            i++;
+
+            // return message size if header magic number was found 
+            if (magic_byte_number == 4 && i + 4 < data.Length)
+            {
+                header_info.data_size = BitConverter.ToInt32(data, i);
+                header_info.return_code = HeaderInfo.ReturnCode.HeaderFound;
+                header_info.data_start_index = i + 4;
+            }
+            else if (magic_byte_number > 0)
+            {
+                header_info.return_code = HeaderInfo.ReturnCode.HeaderFoundPartially;
+                header_info.bytes_saved = magic_byte_number + data.Length - i + 1;
+            }
+            else
+            {
+                header_info.return_code = HeaderInfo.ReturnCode.HeaderNotFound;
+            }
+
+            return header_info;
+
         }
     }
 }
