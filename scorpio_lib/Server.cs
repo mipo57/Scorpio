@@ -49,6 +49,17 @@ namespace scorpio_lib
                 Console.WriteLine("Connection to {ip}:{port} failed, quitting");
                 return;
             }
+
+            while(true)
+            {
+                string input = Console.ReadLine();
+
+                if (input == "quit")
+                {
+                    _socket.Disconnect();
+                    return;
+                }
+            }
         }
 
         /* 
